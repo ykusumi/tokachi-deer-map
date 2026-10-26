@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>十勝エゾシカ遭遇注意マップ（クラウド共有版）</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        #map { height: 100vh; width: 100vw; }
+        /* 夜間モード時の地図反転フィルター */
+        .dark-tiles .leaflet-tile-pane { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+        
+        /* 免責モーダル（最前面） */
+        #disclaimerModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+        }
+
+        /* サイドバー（インラインで確実に制御） */
+        #sidebar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 320px;
+            max-width: 85vw;
+            background-color: white;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            z-index: 9999;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        #sidebar.open {
+            transform: translateX(0);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen overflow-hidden relative">
+
+    <!-- 免責モーダル -->
+    <div id="disclaimerModal">
+        <div class="bg-white p-6 rounded-lg max-w-md shadow-2xl text-center mx-4 border-2 border-emerald-700">
+            <h3 class="font-bold text-xl mb-3 text-red-600">⚠️ ご利用上の注意</h3>
+            <p class="text-sm text-gray-700 mb-6 leading-relaxed text-left">
+                本アプリは十勝管内のエゾシカ目撃情報を共有するものです。情報の正確性や安全性を完全に保証するものではありません。<br><br>
+                <strong>夜間・早朝の運転は十分にご注意ください。</strong>
+            </p>
+            <button id="acceptBtn" class="w-full bg-emerald-700 text-white py-3 rounded-lg font-bold hover:bg-emerald-800 shadow-md text-base cursor-pointer">同意して利用する</button>
+        </div>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="bg-emerald-800 text-white p-3 shadow-md flex justify-between items-center" style="z-index: 10000; position: relative;">
+        <div class="flex items-center gap-3">
+            <button id="sidebarToggleBtn" class="bg-emerald-700 px-3.5 py-2 rounded text-sm font-bold hover:bg-emerald-600 flex items-center gap-1 shadow cursor-pointer">
+                <span>📋 メニュー開閉</span>
+            </button>
+            <h1 class="text-lg font-bold hidden sm:block">十勝エゾシカ遭遇注意マップ</h1>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="nightModeBtn" class="bg-emerald-700 px-3.5 py-2 rounded text-sm font-bold hover:bg-emerald-600 cursor-pointer">🌙 夜間</button>
+            <button id="adminToggleBtn" class="bg-gray-700 px-3.5 py-2 rounded text-sm font-bold hover:bg-gray-600 cursor-pointer">🔒 管理</button>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <div class="flex flex-1 relative overflow-hidden">
+        
+        <!-- 左側サイドバー -->
+        <div id="sidebar">
+            <div class="bg-emerald-900 text-white p-3 flex justify-between items-center">
+                <span class="font-bold text-sm">メニュー・投稿パネル</span>
+                <button id="sidebarCloseBtn" class="text-white hover:text-gray-300 font-bold px-2 py-1 text-sm cursor-pointer">✕ 閉じる</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <!-- 投稿フォーム -->
+                <div class="p-4 border-b bg-emerald-50">
+                    <h2 class="font-bold text-emerald-900 mb-1 text-sm">🦌 シカ目撃情報を投稿</h2>
+                    <p id="selectedCoordText" class="text-xs text-blue-600 font-bold mb-2">👉 地図上の場所をクリックして選択してください</p>
+                    <form id="reportForm" class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600">道路名・地点名</label>
+                            <input type="text" id="roadName" required placeholder="例: 国道38号線 浦幌町付近" class="w-full text-sm p-2 border rounded">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600">危険度</label>
+                                <select id="dangerLevel" class="w-full text-sm p-2 border rounded">
+                                    <option value="high">高 (飛び出し多発)</option>
+                                    <option value="middle">中 (注意区間)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600">時間帯</label>
+                                <input type="text" id="timeSlot" required placeholder="例: 夜間・早朝" class="w-full text-sm p-2 border rounded">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600">コメント</label>
+                            <textarea id="comment" rows="2" placeholder="例: 路肩から突然飛び出してきました" class="w-full text-sm p-2 border rounded"></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-emerald-700 text-white py-2 rounded text-sm font-bold hover:bg-emerald-800 cursor-pointer">この場所で投稿する</button>
+                    </form>
+                </div>
+
+                <!-- スポット一覧 -->
+                <div class="p-4">
+                    <h2 class="font-bold text-gray-800 mb-2 text-sm">周辺の注意スポット一覧</h2>
+                    <div id="spotList" class="space-y-2">
+                        <!-- 動的生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 地図エリア -->
+        <div id="map" class="flex-1"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // ==========================================
+        // 1. Supabase 設定 (ご自身の情報に書き換えてください)
+        // ==========================================
+        const SUPABASE_URL = 'https://qzjcfwvddpstqcqrpguz.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let isAdmin = false;
+        let map, markersLayer, tileLayer, isDark = false;
+        let selectedLocation = null;
+        let tempMarker = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            setupEvents();
+            fetchSpots();
+        });
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([42.9242, 143.2044], 10);
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19, attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            markersLayer = L.layerGroup().addTo(map);
+
+            map.on('click', (e) => {
+                selectedLocation = { lat: e.latlng.lat, lng: e.latlng.lng };
+
+                if (tempMarker) {
+                    map.removeLayer(tempMarker);
+                }
+
+                tempMarker = L.marker([selectedLocation.lat, selectedLocation.lng], {
+                    icon: L.divIcon({ className: 'bg-blue-500 w-4 h-4 rounded-full border-2 border-white shadow' })
+                }).addTo(map).bindPopup('投稿予定地').openPopup();
+
+                document.getElementById('selectedCoordText').textContent = 
+                    `📍 選択中: 緯度 ${selectedLocation.lat.toFixed(4)}, 経度 ${selectedLocation.lng.toFixed(4)}`;
+                document.getElementById('selectedCoordText').className = 'text-xs text-emerald-700 font-bold mb-2';
+
+                const sidebar = document.getElementById('sidebar');
+                if (!sidebar.classList.contains('open')) {
+                    sidebar.classList.add('open');
+                    map.invalidateSize();
+                }
+            });
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open');
+            setTimeout(() => { map.invalidateSize(); }, 300);
+        }
+
+        async function fetchSpots() {
+            markersLayer.clearLayers();
+            const listContainer = document.getElementById('spotList');
+            listContainer.innerHTML = '<p class="text-sm text-gray-500">データを読み込み中...</p>';
+
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+            const { data: spots, error } = await supabaseClient
+                .from('deer_spots')
+                .select('*')
+                .eq('is_approved', true)
+                .gte('created_at', thirtyDaysAgo)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('データ取得エラー:', error);
+                listContainer.innerHTML = '<p class="text-sm text-red-500">データの取得に失敗しました。</p>';
+                return;
+            }
+
+            listContainer.innerHTML = '';
+
+            spots.forEach(spot => {
+                const color = spot.danger_level === 'high' ? 'red' : 'orange';
+                const marker = L.circleMarker([spot.latitude, spot.longitude], {
+                    radius: 8, color: color, fillColor: color, fillOpacity: 0.8
+                });
+
+                let popupContent = `
+                    <div class="p-2">
+                        <strong class="text-base">${spot.road_name}</strong><br>
+                        <span class="text-xs px-2 py-0.5 rounded text-white ${spot.danger_level === 'high' ? 'bg-red-600' : 'bg-orange-500'}">
+                            危険度: ${spot.danger_level === 'high' ? '高' : '中'}
+                        </span><br>
+                        <span class="text-xs text-gray-600">時間帯: ${spot.time_slot}</span><br>
+                        <p class="text-sm mt-1">${spot.comment || ''}</p>
+                        <span class="text-xs text-gray-400">投稿: ${new Date(spot.created_at).toLocaleDateString()}</span>
+                `;
+                if (isAdmin) {
+                    popupContent += `<button onclick="deleteSpot('${spot.id}')" class="mt-2 bg-red-600 text-white px-2 py-1 rounded text-xs w-full cursor-pointer">🗑️ 削除する</button>`;
+                }
+                popupContent += `</div>`;
+
+                marker.bindPopup(popupContent);
+                markersLayer.addLayer(marker);
+
+                const item = document.createElement('div');
+                item.className = 'p-3 border rounded shadow-sm bg-gray-50 hover:bg-gray-100 cursor-pointer';
+                item.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-sm text-gray-800">${spot.road_name}</span>
+                        <span class="text-xs text-emerald-700">📍 詳細を見る</span>
+                    </div>
+                    <p class="text-xs text-gray-600 mt-1">${spot.comment || 'コメントなし'}</p>
+                `;
+                item.onclick = () => {
+                    map.setView([spot.latitude, spot.longitude], 13);
+                    marker.openPopup();
+                    if (window.innerWidth < 768) {
+                        document.getElementById('sidebar').classList.remove('open');
+                        map.invalidateSize();
+                    }
+                };
+                listContainer.appendChild(item);
+            });
+        }
+
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!selectedLocation) {
+                alert('マップ上で目撃地点をクリックして選択してください！');
+                return;
+            }
+
+            const newSpot = {
+                road_name: document.getElementById('roadName').value,
+                danger_level: document.getElementById('dangerLevel').value,
+                time_slot: document.getElementById('timeSlot').value,
+                comment: document.getElementById('comment').value,
+                latitude: selectedLocation.lat,
+                longitude: selectedLocation.lng,
+                is_approved: true
+            };
+
+            const { error } = await supabaseClient.from('deer_spots').insert([newSpot]);
+            if (error) {
+                alert('投稿に失敗しました: ' + error.message);
+            } else {
+                alert('目撃情報を投稿しました！');
+                document.getElementById('reportForm').reset();
+                
+                if (tempMarker) {
+                    map.removeLayer(tempMarker);
+                    tempMarker = null;
+                }
+                selectedLocation = null;
+                document.getElementById('selectedCoordText').textContent = '👉 地図上の場所をクリックして選択してください';
+
+                fetchSpots();
+                document.getElementById('sidebar').classList.remove('open');
+                map.invalidateSize();
+            }
+        });
+
+        async function deleteSpot(id) {
+            if (!confirm('このスポットを削除しますか？')) return;
+            const { error } = await supabaseClient.from('deer_spots').delete().eq('id', id);
+            if (error) {
+                alert('削除に失敗しました');
+            } else {
+                alert('削除しました');
+                fetchSpots();
+            }
+        }
+
+        function setupEvents() {
+            document.getElementById('acceptBtn').onclick = () => {
+                document.getElementById('disclaimerModal').style.display = 'none';
+            };
+
+            document.getElementById('sidebarToggleBtn').onclick = (e) => {
+                e.stopPropagation();
+                toggleSidebar();
+            };
+
+            document.getElementById('sidebarCloseBtn').onclick = () => {
+                toggleSidebar();
+            };
+
+            document.getElementById('nightModeBtn').onclick = () => {
+                isDark = !isDark;
+                const mapElement = document.getElementById('map');
+                if (isDark) {
+                    mapElement.classList.add('dark-tiles');
+                    document.getElementById('nightModeBtn').textContent = '☀️ 昼間';
+                } else {
+                    mapElement.classList.remove('dark-tiles');
+                    document.getElementById('nightModeBtn').textContent = '🌙 夜間';
+                }
+            };
+
+            // 【セキュリティ強化】RPC関数を用いたサーバーサイド照合方式
+            document.getElementById('adminToggleBtn').onclick = async () => {
+                const pass = prompt('管理者パスコードを入力してください:');
+                if (pass === null) return;
+
+                // SupabaseのRPC関数を呼び出して安全に判定
+                const { data: isValid, error } = await supabaseClient.rpc('verify_admin', { input_pass: pass });
+
+                if (!error && isValid === true) {
+                    isAdmin = !isAdmin;
+                    alert(isAdmin ? '管理者モードを有効化しました' : '管理者モードを終了しました');
+                    fetchSpots();
+                } else {
+                    alert('パスコードが違います');
+                }
+            };
+        }
+    </script>
+</body>
+</html>
