@@ -151,9 +151,30 @@
             }
         });
 
-        // 投稿ボタンクリック時の案内
-        document.getElementById('add-marker-btn').addEventListener('click', () => {
-            alert('地図上の目撃した場所をクリックすると、投稿フォームが表示されます。');
+        // 投稿ボタンクリック時の処理（ボタンから直接投稿できるように変更）
+        document.getElementById('add-marker-btn').addEventListener('click', async () => {
+            const desc = prompt('この付近のエゾシカ目撃情報を入力してください：');
+            if (!desc) return;
+
+            // 現在表示している地図の中心座標を取得して登録する
+            const center = map.getCenter();
+
+            const { error } = await db
+                .from('deer_sightings')
+                .insert([
+                    { 
+                        latitude: center.lat, 
+                        longitude: center.lng, 
+                        description: desc 
+                    }
+                ]);
+
+            if (error) {
+                alert('投稿に失敗しました: ' + error.message);
+            } else {
+                alert('目撃情報を投稿しました！');
+                loadMarkers();
+            }
         });
 
         // 初期ロード
