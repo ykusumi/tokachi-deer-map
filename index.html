@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>十勝エゾシカ遭遇注意マップ</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,16 +12,34 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        html, body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        /* 鹿の絵文字アイコン用のスタイル */
+        .deer-marker-icon {
+            background: transparent;
+            border: none;
+            text-align: center;
+            font-size: 24px;
+            line-height: 24px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+    </style>
 </head>
-<body class="h-screen w-screen flex flex-col md:flex-row bg-gray-50 m-0 p-0 overflow-hidden font-sans relative">
+<body class="h-screen w-screen flex flex-col md:flex-row bg-gray-50 relative">
 
     <!-- スマホ用：メニューを開くフローティングボタン -->
-    <button id="open-menu-btn" class="absolute top-3 left-3 z-20 md:hidden bg-emerald-800 text-white px-3 py-2 rounded-lg shadow-lg flex items-center gap-1.5 text-xs font-bold hover:bg-emerald-900 transition">
-        <span>☰ メニューを開く</span>
+    <button id="open-menu-btn" class="absolute top-3 left-3 z-[1000] md:hidden bg-emerald-800 text-white px-3.5 py-2 rounded-lg shadow-lg flex items-center gap-1.5 text-xs font-bold hover:bg-emerald-900 transition">
+        <span>☰ メニュー</span>
     </button>
 
     <!-- サイドバー / コントロールパネル -->
-    <div id="sidebar" class="fixed inset-y-0 left-0 z-30 w-80 md:w-96 bg-white shadow-2xl flex flex-col h-full transform -translate-x-full md:translate-x-0 md:static md:shadow-xl transition-transform duration-300">
+    <div id="sidebar" class="fixed inset-y-0 left-0 z-[1100] w-80 md:w-96 bg-white shadow-2xl flex flex-col h-full transform -translate-x-full md:translate-x-0 md:static md:shadow-xl transition-transform duration-300">
         <div class="p-4 border-b border-gray-100 bg-emerald-800 text-white flex justify-between items-center">
             <h1 class="font-bold text-base flex items-center gap-2">
                 🦌 十勝エゾシカ遭遇注意マップ
@@ -128,7 +146,9 @@
         document.querySelector('.risk-btn[data-level="middle"]').classList.add('ring-2', 'ring-offset-1', 'ring-black');
 
         // 十勝エリアを中心とした地図初期化
-        const map = L.map('map').setView([42.93, 143.65], 10);
+        const map = L.map('map', { zoomControl: false }).setView([42.93, 143.65], 10);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -139,6 +159,15 @@
         }, 200);
 
         let markersLayer = L.layerGroup().addTo(map);
+
+        // 鹿のアイコン（絵文字）の定義
+        const deerIcon = L.divIcon({
+            className: 'deer-marker-icon',
+            html: '🦌',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -10]
+        });
 
         // データベース（deer_spots）から目撃情報を取得してピンを立てる関数
         async function loadMarkers() {
@@ -170,8 +199,8 @@
                 if (danger === 'high') badgeColor = 'bg-orange-100 text-orange-800';
                 if (danger === 'danger') badgeColor = 'bg-red-100 text-red-800';
 
-                // マップにピンを追加
-                const marker = L.marker([sighting.latitude, sighting.longitude]).addTo(markersLayer);
+                // マップに鹿アイコンのピンを追加
+                const marker = L.marker([sighting.latitude, sighting.longitude], { icon: deerIcon }).addTo(markersLayer);
                 marker.bindPopup(`
                     <div class="p-1 space-y-1">
                         <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
