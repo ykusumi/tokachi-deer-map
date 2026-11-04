@@ -25,7 +25,7 @@
         
         <div class="p-4 flex-1 overflow-y-auto space-y-4">
             <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 leading-relaxed">
-                十勝エリアでのエゾシカ目撃情報を共有し、安全なドライブを守るためのマップです。
+                十勝エリアでのエゾシカ目撃情報を共有し、安全なドライブを守るためのマップです。地図をクリックするか、下のボタンから情報を投稿できます。
             </div>
             
             <div class="space-y-2">
@@ -33,13 +33,18 @@
                     ＋ シカの目撃情報を投稿する
                 </button>
             </div>
+
+            <!-- 目撃情報一覧コンテナ -->
+            <div id="marker-list" class="space-y-2 mt-4">
+                <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">最近の目撃情報</h2>
+                <div id="list-items" class="space-y-2">
+                    <!-- 動的にリストが追加されます -->
+                </div>
+            </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- ▼ PCではメニュー幅、スマホでは小さくするエリア -->
-        <!-- ========================================== -->
+        <!-- サーバー維持・開発サポート（OFUSE）エリア -->
         <div class="p-2 md:p-3 border-t border-gray-100 bg-gray-50 text-center">
-            <!-- スマホでは文字をごく小さく、PCではメニュー幅に合わせる -->
             <p class="text-[10px] md:text-xs text-gray-400">
                 サーバー維持・開発は 
                 <a href="https://ofuse.me/sky_horizon_self" target="_blank" rel="noopener noreferrer" class="text-emerald-600 hover:underline font-medium">
@@ -48,7 +53,6 @@
                 にて受付中☕
             </p>
         </div>
-        <!-- ========================================== -->
     </div>
 
     <!-- メインマップエリア -->
@@ -60,12 +64,95 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // 地図初期化
-        const map = L.map('map').setView([42.9, 143.2], 9);
+        // 十勝エリアを中心とした地図初期化
+        const map = L.map('map').setView([42.93, 143.65], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
+
+        let markersLayer = L.layerGroup().addTo(map);
+
+        // データベースから目撃情報を取得してピンを立てる関数
+        async function loadMarkers() {
+            markersLayer.clearLayers();
+            const listItems = document.getElementById('list-items');
+            listItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
+
+            const { data, error } = await supabase
+                .from('deer_sightings') // テーブル名（必要に応じてご自身の環境に合わせてください）
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('データ取得エラー:', error);
+                listItems.innerHTML = '<p class="text-xs text-red-500">情報を取得できませんでした</p>';
+                return;
+            }
+
+            listItems.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                listItems.innerHTML = '<p class="text-xs text-gray-400">まだ目撃情報は投稿されていません</p>';
+                return;
+            }
+
+            data.forEach(sighting => {
+                // マップにピンを追加
+                const marker = L.marker([sighting.latitude, sighting.longitude]).addTo(markersLayer);
+                marker.bindPopup(`
+                    <div class="p-1">
+                        <strong class="text-emerald-800">🦌 エゾシカ目撃</strong>
+                        <p class="text-xs text-gray-600 mt-1">${sighting.description || '詳細なし'}</p>
+                        <p class="text-[10px] text-gray-400 mt-1">${new Date(sighting.created_at).toLocaleString('ja-JP')}</p>
+                    </div>
+                `);
+
+                // サイドバーのリストに追加
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm text-xs hover:bg-emerald-50 transition cursor-pointer';
+                itemDiv.innerHTML = `
+                    <div class="font-medium text-gray-800">📍 目撃情報</div>
+                    <div class="text-gray-600 truncate mt-0.5">${sighting.description || '詳細なし'}</div>
+                    <div class="text-[10px] text-gray-400 mt-1">${new Date(sighting.created_at).toLocaleDateString('ja-JP')}</div>
+                `;
+                itemDiv.addEventListener('click', () => {
+                    map.setView([sighting.latitude, sighting.longitude], 14);
+                    marker.openPopup();
+                });
+                listItems.appendChild(itemDiv);
+            });
+        }
+
+        // マップクリックまたは投稿ボタンでの新規登録処理
+        map.on('click', async function(e) {
+            const desc = prompt('この場所のエゾシカ目撃情報を入力してください：');
+            if (!desc) return;
+
+            const { error } = await supabase
+                .from('deer_sightings')
+                .insert([
+                    { 
+                        latitude: e.latlng.lat, 
+                        longitude: e.latlng.lng, 
+                        description: desc 
+                    }
+                ]);
+
+            if (error) {
+                alert('投稿に失敗しました: ' + error.message);
+            } else {
+                loadMarkers();
+            }
+        });
+
+        // 投稿ボタンクリック時の案内
+        document.getElementById('add-marker-btn').addEventListener('click', () => {
+            alert('地図上の目撃した場所をクリックすると、投稿フォームが表示されます。');
+        });
+
+        // 初期ロード
+        loadMarkers();
     </script>
 </body>
 </html>
