@@ -40,23 +40,34 @@
             <!-- 投稿フォームエリア -->
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
                 <h2 class="text-xs font-bold text-gray-700">目撃情報を投稿する</h2>
+                
+                <div>
+                    <label class="block text-[11px] text-gray-600 mb-1">場所・道路名</label>
+                    <input type="text" id="input-road" placeholder="例: 国道38号線 幕別豊頃間" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
+                </div>
+
                 <div>
                     <label class="block text-[11px] text-gray-600 mb-1">危険度を選択</label>
                     <div class="grid grid-cols-3 gap-2">
-                        <button type="button" class="risk-btn py-1.5 px-2 bg-yellow-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="注意">注意</button>
-                        <button type="button" class="risk-btn py-1.5 px-2 bg-orange-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="警戒">警戒</button>
-                        <button type="button" class="risk-btn py-1.5 px-2 bg-red-600 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="危険">危険</button>
+                        <button type="button" class="risk-btn py-1.5 px-2 bg-yellow-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="middle">注意 (middle)</button>
+                        <button type="button" class="risk-btn py-1.5 px-2 bg-orange-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="high">警戒 (high)</button>
+                        <button type="button" class="risk-btn py-1.5 px-2 bg-red-600 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="danger">危険 (danger)</button>
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] text-gray-600 mb-1">メッセージ・状況</label>
-                    <input type="text" id="sighting-desc" placeholder="例: 道路脇に2頭飛び出してきた" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
+                    <label class="block text-[11px] text-gray-600 mb-1">時間帯</label>
+                    <input type="text" id="input-time" placeholder="例: 夜 17時半ぐらい" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-gray-600 mb-1">コメント・状況</label>
+                    <input type="text" id="input-comment" placeholder="例: 西側から急に飛び出してきた" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
                 </div>
 
                 <p class="text-[10px] text-gray-500">※地図上の目撃した場所をクリックしてください。</p>
                 <button id="add-marker-btn" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded shadow transition text-xs">
-                    📍 マップをクリックして投稿モード
+                    📍 マップをクリックして投稿
                 </button>
             </div>
 
@@ -90,7 +101,7 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
         const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // スマホ用メニュー開閉の制御（スライドイン方式）
+        // スマホ用メニュー開閉の制御
         const sidebar = document.getElementById('sidebar');
         const openMenuBtn = document.getElementById('open-menu-btn');
         const closeMenuBtn = document.getElementById('close-menu-btn');
@@ -106,15 +117,15 @@
         });
 
         // 選択されている危険度の管理
-        let selectedRisk = '注意';
+        let selectedDanger = 'middle';
         document.querySelectorAll('.risk-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.risk-btn').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-black'));
                 e.target.classList.add('ring-2', 'ring-offset-1', 'ring-black');
-                selectedRisk = e.target.getAttribute('data-level');
+                selectedDanger = e.target.getAttribute('data-level');
             });
         });
-        document.querySelector('.risk-btn[data-level="注意"]').classList.add('ring-2', 'ring-offset-1', 'ring-black');
+        document.querySelector('.risk-btn[data-level="middle"]').classList.add('ring-2', 'ring-offset-1', 'ring-black');
 
         // 十勝エリアを中心とした地図初期化
         const map = L.map('map').setView([42.93, 143.65], 10);
@@ -154,18 +165,19 @@
             }
 
             data.forEach(sighting => {
-                const risk = sighting.risk_level || '注意';
+                const danger = sighting.danger_level || 'middle';
                 let badgeColor = 'bg-yellow-100 text-yellow-800';
-                if (risk === '警戒') badgeColor = 'bg-orange-100 text-orange-800';
-                if (risk === '危険') badgeColor = 'bg-red-100 text-red-800';
+                if (danger === 'high') badgeColor = 'bg-orange-100 text-orange-800';
+                if (danger === 'danger') badgeColor = 'bg-red-100 text-red-800';
 
                 // マップにピンを追加
                 const marker = L.marker([sighting.latitude, sighting.longitude]).addTo(markersLayer);
                 marker.bindPopup(`
-                    <div class="p-1">
-                        <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${risk}】</span>
-                        <p class="text-xs text-gray-700 mt-1">${sighting.description || '詳細なし'}</p>
-                        <p class="text-[10px] text-gray-400 mt-1">${new Date(sighting.created_at).toLocaleString('ja-JP')}</p>
+                    <div class="p-1 space-y-1">
+                        <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
+                        <div class="font-bold text-xs text-gray-800">${sighting.road_name || '場所未登録'}</div>
+                        <p class="text-xs text-gray-600">${sighting.comment || '詳細なし'}</p>
+                        <p class="text-[10px] text-gray-400">時間帯: ${sighting.time_slot || '不明'}</p>
                     </div>
                 `);
 
@@ -174,15 +186,15 @@
                 itemDiv.className = 'p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm text-xs hover:bg-emerald-50 transition cursor-pointer';
                 itemDiv.innerHTML = `
                     <div class="flex items-center justify-between mb-1">
-                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${risk}】</span>
-                        <span class="text-[10px] text-gray-400">${new Date(sighting.created_at).toLocaleDateString('ja-JP')}</span>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
+                        <span class="text-[10px] text-gray-400">${sighting.time_slot || ''}</span>
                     </div>
-                    <div class="text-gray-700 truncate">${sighting.description || '詳細なし'}</div>
+                    <div class="font-medium text-gray-800">${sighting.road_name || '場所名なし'}</div>
+                    <div class="text-gray-600 truncate mt-0.5">${sighting.comment || '詳細なし'}</div>
                 `;
                 itemDiv.addEventListener('click', () => {
                     map.setView([sighting.latitude, sighting.longitude], 14);
                     marker.openPopup();
-                    // スマホでリスト項目をクリックしたときにメニューを閉じる
                     if (window.innerWidth < 768) {
                         sidebar.classList.add('-translate-x-full');
                         setTimeout(() => { map.invalidateSize(); }, 200);
@@ -194,8 +206,14 @@
 
         // マップクリック時の新規登録処理
         map.on('click', async function(e) {
-            const descInput = document.getElementById('sighting-desc');
-            const desc = descInput.value.trim() || '目撃情報';
+            const road = document.getElementById('input-road').value.trim();
+            const timeSlot = document.getElementById('input-time').value.trim();
+            const comment = document.getElementById('input-comment').value.trim();
+
+            if (!road) {
+                alert('場所・道路名を入力してください');
+                return;
+            }
 
             const { error } = await db
                 .from('deer_sightings')
@@ -203,8 +221,11 @@
                     { 
                         latitude: e.latlng.lat, 
                         longitude: e.latlng.lng, 
-                        description: desc,
-                        risk_level: selectedRisk
+                        road_name: road,
+                        danger_level: selectedDanger,
+                        time_slot: timeSlot,
+                        comment: comment,
+                        is_approved: true
                     }
                 ]);
 
@@ -212,7 +233,9 @@
                 alert('投稿に失敗しました: ' + error.message);
             } else {
                 alert('目撃情報を登録しました！');
-                descInput.value = ''; 
+                document.getElementById('input-road').value = '';
+                document.getElementById('input-time').value = '';
+                document.getElementById('input-comment').value = '';
                 loadMarkers();
                 if (window.innerWidth < 768) {
                     sidebar.classList.add('-translate-x-full');
@@ -222,7 +245,7 @@
         });
 
         document.getElementById('add-marker-btn').addEventListener('click', () => {
-            alert('地図上の目撃した場所をクリックしてください。選択中の危険度とメッセージで登録されます。');
+            alert('地図上の目撃した場所をクリックしてください。入力された情報と危険度で登録されます。');
             if (window.innerWidth < 768) {
                 sidebar.classList.add('-translate-x-full');
                 setTimeout(() => { map.invalidateSize(); }, 200);
