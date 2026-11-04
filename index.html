@@ -13,14 +13,23 @@
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="h-screen flex flex-col md:flex-row bg-gray-50 m-0 p-0 overflow-hidden font-sans">
+<body class="h-screen flex flex-col md:flex-row bg-gray-50 m-0 p-0 overflow-hidden font-sans relative">
+
+    <!-- スマホ・タブレット用：メニューを開くフローティングボタン -->
+    <button id="open-menu-btn" class="absolute top-3 left-3 z-20 md:hidden bg-emerald-800 text-white p-2.5 rounded-lg shadow-lg flex items-center gap-1.5 text-xs font-bold hover:bg-emerald-900 transition">
+        <span>☰ メニューを開く</span>
+    </button>
 
     <!-- サイドバー / コントロールパネル -->
-    <div class="w-full md:w-96 bg-white shadow-xl z-10 flex flex-col h-1/3 md:h-full">
+    <div id="sidebar" class="w-full md:w-96 bg-white shadow-xl z-30 flex flex-col h-full md:h-full transition-all duration-300 absolute md:relative transform -translate-y-full md:translate-y-0 hidden md:flex">
         <div class="p-4 border-b border-gray-100 bg-emerald-800 text-white flex justify-between items-center">
             <h1 class="font-bold text-lg flex items-center gap-2">
                 🦌 十勝エゾシカ遭遇注意マップ
             </h1>
+            <!-- メニューを閉じるボタン（スマホ向け） -->
+            <button id="close-menu-btn" class="md:hidden text-white text-sm px-2 py-1 bg-emerald-700 hover:bg-emerald-600 rounded">
+                ✕ 閉じる
+            </button>
         </div>
         
         <div class="p-4 flex-1 overflow-y-auto space-y-4">
@@ -32,169 +41,4 @@
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
                 <h2 class="text-xs font-bold text-gray-700">目撃情報を投稿する</h2>
                 <div>
-                    <label class="block text-[11px] text-gray-600 mb-1">危険度を選択</label>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button type="button" class="risk-btn py-1.5 px-2 bg-yellow-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-90 active" data-level="注意">注意</button>
-                        <button type="button" class="risk-btn py-1.5 px-2 bg-orange-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-90" data-level="警戒">警戒</button>
-                        <button type="button" class="risk-btn py-1.5 px-2 bg-red-600 text-white text-xs font-medium rounded shadow-sm hover:opacity-90" data-level="危険">危険</button>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-[11px] text-gray-600 mb-1">メッセージ・状況</label>
-                    <input type="text" id="sighting-desc" placeholder="例: 道路脇に2頭飛び出してきた" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
-                </div>
-
-                <p class="text-[10px] text-gray-500">※地図上の目撃した場所をクリックするか、下のボタンを押してください。</p>
-                <button id="add-marker-btn" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded shadow transition text-xs">
-                    📍 マップをクリックして投稿
-                </button>
-            </div>
-
-            <!-- 目撃情報一覧コンテナ -->
-            <div id="marker-list" class="space-y-2 mt-4">
-                <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">最近の目撃情報</h2>
-                <div id="list-items" class="space-y-2">
-                    <!-- 動的にリストが追加されます -->
-                </div>
-            </div>
-        </div>
-
-        <!-- サーバー維持・開発サポート（OFUSE）エリア -->
-        <div class="p-2 md:p-3 border-t border-gray-100 bg-gray-50 text-center">
-            <p class="text-[10px] md:text-xs text-gray-400">
-                サーバー維持・開発は 
-                <a href="https://ofuse.me/sky_horizon_self" target="_blank" rel="noopener noreferrer" class="text-emerald-600 hover:underline font-medium">
-                    OFUSE
-                </a> 
-                にて受付中☕
-            </p>
-        </div>
-    </div>
-
-    <!-- メインマップエリア -->
-    <div id="map" class="flex-1 h-2/3 md:h-full w-full"></div>
-
-    <script>
-        // Supabase設定
-        const SUPABASE_URL = 'https://qzjcfwvddpstqcqrpguz.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
-        const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // 選択されている危険度の管理
-        let selectedRisk = '注意';
-        document.querySelectorAll('.risk-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.risk-btn').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-black'));
-                e.target.classList.add('ring-2', 'ring-offset-1', 'ring-black');
-                selectedRisk = e.target.getAttribute('data-level');
-            });
-        });
-        // 初期選択に枠線を付与
-        document.querySelector('.risk-btn[data-level="注意"]').classList.add('ring-2', 'ring-offset-1', 'ring-black');
-
-        // 十勝エリアを中心とした地図初期化
-        const map = L.map('map').setView([42.93, 143.65], 10);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        setTimeout(() => {
-            map.invalidateSize();
-        }, 200);
-
-        let markersLayer = L.layerGroup().addTo(map);
-
-        // データベースから目撃情報を取得してピンを立てる関数
-        async function loadMarkers() {
-            markersLayer.clearLayers();
-            const listItems = document.getElementById('list-items');
-            listItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
-
-            const { data, error } = await db
-                .from('deer_sightings')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                console.error('データ取得エラー:', error);
-                listItems.innerHTML = '<p class="text-xs text-red-500">情報を取得できませんでした</p>';
-                return;
-            }
-
-            listItems.innerHTML = '';
-
-            if (!data || data.length === 0) {
-                listItems.innerHTML = '<p class="text-xs text-gray-400">まだ目撃情報は投稿されていません</p>';
-                return;
-            }
-
-            data.forEach(sighting => {
-                const risk = sighting.risk_level || '注意';
-                let badgeColor = 'bg-yellow-100 text-yellow-800';
-                if (risk === '警戒') badgeColor = 'bg-orange-100 text-orange-800';
-                if (risk === '危険') badgeColor = 'bg-red-100 text-red-800';
-
-                // マップにピンを追加
-                const marker = L.marker([sighting.latitude, sighting.longitude]).addTo(markersLayer);
-                marker.bindPopup(`
-                    <div class="p-1">
-                        <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${risk}】</span>
-                        <p class="text-xs text-gray-700 mt-1">${sighting.description || '詳細なし'}</p>
-                        <p class="text-[10px] text-gray-400 mt-1">${new Date(sighting.created_at).toLocaleString('ja-JP')}</p>
-                    </div>
-                `);
-
-                // サイドバーのリストに追加
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm text-xs hover:bg-emerald-50 transition cursor-pointer';
-                itemDiv.innerHTML = `
-                    <div class="flex items-center justify-between mb-1">
-                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${risk}】</span>
-                        <span class="text-[10px] text-gray-400">${new Date(sighting.created_at).toLocaleDateString('ja-JP')}</span>
-                    </div>
-                    <div class="text-gray-700 truncate">${sighting.description || '詳細なし'}</div>
-                `;
-                itemDiv.addEventListener('click', () => {
-                    map.setView([sighting.latitude, sighting.longitude], 14);
-                    marker.openPopup();
-                });
-                listItems.appendChild(itemDiv);
-            });
-        }
-
-        // マップクリック時の新規登録処理
-        map.on('click', async function(e) {
-            const descInput = document.getElementById('sighting-desc');
-            const desc = descInput.value.trim() || '目撃情報';
-
-            const { error } = await db
-                .from('deer_sightings')
-                .insert([
-                    { 
-                        latitude: e.latlng.lat, 
-                        longitude: e.latlng.lng, 
-                        description: desc,
-                        risk_level: selectedRisk
-                    }
-                ]);
-
-            if (error) {
-                alert('投稿に失敗しました: ' + error.message);
-            } else {
-                alert('目撃情報を登録しました！');
-                descInput.value = ''; // 入力欄をクリア
-                loadMarkers();
-            }
-        });
-
-        document.getElementById('add-marker-btn').addEventListener('click', () => {
-            alert('地図上の目撃した場所をクリックしてください。選択中の危険度とメッセージで登録されます。');
-        });
-
-        // 初期ロード
-        loadMarkers();
-    </script>
-</body>
-</html>
+                    <label class="block text-[11px] text-gray-600 mb-1">危険度を選択
