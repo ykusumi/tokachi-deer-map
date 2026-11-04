@@ -71,6 +71,11 @@
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
+        // ▼【追加】フレックスボックス環境で地図が正しく描画されない不具合を防ぐ対策
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 200);
+
         let markersLayer = L.layerGroup().addTo(map);
 
         // データベースから目撃情報を取得してピンを立てる関数
@@ -80,7 +85,7 @@
             listItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
 
             const { data, error } = await supabase
-                .from('deer_sightings') // テーブル名（必要に応じてご自身の環境に合わせてください）
+                .from('deer_sightings')
                 .select('*')
                 .order('created_at', { ascending: false });
 
@@ -124,7 +129,7 @@
             });
         }
 
-        // マップクリックまたは投稿ボタンでの新規登録処理
+        // マップクリックでの新規登録処理
         map.on('click', async function(e) {
             const desc = prompt('この場所のエゾシカ目撃情報を入力してください：');
             if (!desc) return;
