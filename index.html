@@ -140,14 +140,14 @@
 
         let markersLayer = L.layerGroup().addTo(map);
 
-        // データベースから目撃情報を取得してピンを立てる関数
+        // データベース（deer_spots）から目撃情報を取得してピンを立てる関数
         async function loadMarkers() {
             markersLayer.clearLayers();
             const listItems = document.getElementById('list-items');
             listItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
 
             const { data, error } = await db
-                .from('deer_sightings')
+                .from('deer_spots')
                 .select('*')
                 .order('created_at', { ascending: false });
 
@@ -216,7 +216,7 @@
             }
 
             const { error } = await db
-                .from('deer_sightings')
+                .from('deer_spots')
                 .insert([
                     { 
                         latitude: e.latlng.lat, 
