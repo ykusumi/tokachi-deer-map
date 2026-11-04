@@ -59,10 +59,10 @@
     <div id="map" class="flex-1 h-2/3 md:h-full w-full"></div>
 
     <script>
-        // Supabase設定
+        // Supabase設定（変数名を衝突しないよう 'supabaseClient' に変更）
         const SUPABASE_URL = 'https://qzjcfwvddpstqcqrpguz.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // 十勝エリアを中心とした地図初期化
         const map = L.map('map').setView([42.93, 143.65], 10);
@@ -71,7 +71,7 @@
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // ▼【追加】フレックスボックス環境で地図が正しく描画されない不具合を防ぐ対策
+        // フレックスボックス環境で地図が正しく描画されない不具合を防ぐ対策
         setTimeout(() => {
             map.invalidateSize();
         }, 200);
@@ -84,7 +84,7 @@
             const listItems = document.getElementById('list-items');
             listItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
 
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('deer_sightings')
                 .select('*')
                 .order('created_at', { ascending: false });
@@ -134,7 +134,7 @@
             const desc = prompt('この場所のエゾシカ目撃情報を入力してください：');
             if (!desc) return;
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('deer_sightings')
                 .insert([
                     { 
