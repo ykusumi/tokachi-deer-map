@@ -13,7 +13,6 @@
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* 画面全体のレイアウト崩れと地図消失を防ぐ必須スタイル */
         html, body {
             height: 100%;
             width: 100%;
@@ -43,13 +42,12 @@
         <span>☰ メニュー</span>
     </button>
 
-    <!-- サイドバー / 管理画面 -->
+    <!-- サイドバー / メインパネル -->
     <div id="sidebar" class="fixed md:static inset-y-0 left-0 z-[1100] w-80 md:w-96 bg-white shadow-2xl md:shadow-xl flex flex-col h-full transform -translate-x-full md:translate-x-0 transition-transform duration-300">
         <div class="p-4 border-b border-gray-100 bg-emerald-800 text-white flex justify-between items-center">
             <h1 class="font-bold text-base flex items-center gap-2">
                 🦌 十勝エゾシカ遭遇注意マップ
             </h1>
-            <!-- メニューを閉じるボタン（スマホ向け） -->
             <button id="close-menu-btn" class="md:hidden text-white text-xs px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded">
                 ✕ 閉じる
             </button>
@@ -94,16 +92,18 @@
                 </button>
             </div>
 
-            <!-- 目撃情報一覧 兼 管理・削除パネル -->
+            <!-- 最近の目撃情報一覧（閲覧用） -->
             <div id="marker-list" class="space-y-2 mt-4">
-                <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">管理・目撃情報一覧（削除可能）</h2>
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">最近の目撃情報</h2>
+                    <button id="open-admin-modal" class="text-[11px] text-emerald-700 hover:underline font-medium">🔑 管理画面を開く</button>
+                </div>
                 <div id="list-items" class="space-y-2">
                     <!-- 動的にリストが追加されます -->
                 </div>
             </div>
         </div>
 
-        <!-- サーバー維持・開発サポート（OFUSE）エリア -->
         <div class="p-3 border-t border-gray-100 bg-gray-50 text-center">
             <p class="text-[10px] md:text-xs text-gray-400">
                 サーバー維持・開発は 
@@ -117,6 +117,37 @@
 
     <!-- メインマップエリア -->
     <div id="map"></div>
+
+    <!-- 管理画面用モーダル（Supabase関数認証 & データ削除パネル） -->
+    <div id="admin-modal" class="fixed inset-0 z-[2000] bg-black bg-opacity-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+            <!-- モーダルヘッダー -->
+            <div class="bg-gray-800 text-white p-4 flex justify-between items-center">
+                <h3 class="font-bold text-sm flex items-center gap-2">🔑 管理者ログイン・データ管理画面</h3>
+                <button id="close-admin-modal" class="text-gray-300 hover:text-white text-sm font-bold">✕ 閉じる</button>
+            </div>
+
+            <!-- パスワード入力セクション -->
+            <div id="auth-section" class="p-6 space-y-3">
+                <p class="text-xs text-gray-600">登録された情報の削除や管理を行うには、管理者パスワードを入力してください。</p>
+                <div class="flex gap-2">
+                    <input type="password" id="admin-pass-input" placeholder="パスワードを入力" class="flex-1 px-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gray-800">
+                    <button id="auth-submit-btn" class="bg-gray-800 hover:bg-gray-900 text-white text-xs px-4 py-2 rounded font-medium">認証</button>
+                </div>
+            </div>
+
+            <!-- 認証後に表示される削除・管理リストセクション -->
+            <div id="admin-panel-section" class="p-4 flex-1 overflow-y-auto space-y-3 hidden">
+                <div class="flex justify-between items-center bg-gray-100 p-2 rounded text-xs font-bold text-gray-700">
+                    <span>登録データ一覧（削除可能）</span>
+                    <button id="logout-admin-btn" class="text-red-600 hover:underline text-[11px]">ログアウト</button>
+                </div>
+                <div id="admin-list-items" class="space-y-2">
+                    <!-- 管理用リストがここに展開されます -->
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Supabase設定
@@ -133,13 +164,7 @@
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // 読み込み完了後に確実に地図のサイズを再計算させる
-        window.addEventListener('load', () => {
-            map.invalidateSize();
-        });
-        setTimeout(() => {
-            map.invalidateSize();
-        }, 300);
+        setTimeout(() => { map.invalidateSize(); }, 300);
 
         // スマホ用メニュー開閉の制御
         const sidebar = document.getElementById('sidebar');
@@ -154,6 +179,56 @@
         closeMenuBtn.addEventListener('click', () => {
             sidebar.classList.add('-translate-x-full');
             setTimeout(() => { map.invalidateSize(); }, 200);
+        });
+
+        // 管理画面モーダルの開閉制御
+        const adminModal = document.getElementById('admin-modal');
+        const openAdminModalBtn = document.getElementById('open-admin-modal');
+        const closeAdminModalBtn = document.getElementById('close-admin-modal');
+        const authSection = document.getElementById('auth-section');
+        const adminPanelSection = document.getElementById('admin-panel-section');
+        const adminPassInput = document.getElementById('admin-pass-input');
+        const authSubmitBtn = document.getElementById('auth-submit-btn');
+        const logoutAdminBtn = document.getElementById('logout-admin-btn');
+
+        openAdminModalBtn.addEventListener('click', () => {
+            adminModal.classList.remove('hidden');
+            adminPassInput.value = '';
+        });
+
+        closeAdminModalBtn.addEventListener('click', () => {
+            adminModal.classList.add('hidden');
+        });
+
+        // Supabaseの関数（verify_admin）を呼び出してパスワードを検証する処理
+        authSubmitBtn.addEventListener('click', async () => {
+            const inputVal = adminPassInput.value;
+            if (!inputVal) return;
+
+            // SupabaseのRPC（リモートプロシージャコール）で関数を実行
+            const { data, error } = await db.rpc('verify_admin', { input_pass: inputVal });
+
+            if (error) {
+                alert('認証エラーが発生しました: ' + error.message);
+                return;
+            }
+
+            // 関数が true を返せば認証成功
+            if (data === true) {
+                authSection.classList.add('hidden');
+                adminPanelSection.classList.remove('hidden');
+                loadAdminMarkers(); // 管理用リストを読み込み
+            } else {
+                alert('パスワードが間違っています。');
+                adminPassInput.value = '';
+            }
+        });
+
+        // ログアウト処理
+        logoutAdminBtn.addEventListener('click', () => {
+            authSection.classList.remove('hidden');
+            adminPanelSection.classList.add('hidden');
+            adminPassInput.value = '';
         });
 
         // 選択されている危険度の管理
@@ -178,7 +253,7 @@
             popupAnchor: [0, -10]
         });
 
-        // データベース（deer_spots）から目撃情報を取得してピンを立てる関数
+        // 通常の目撃情報リスト（削除ボタンなし）をロード
         async function loadMarkers() {
             markersLayer.clearLayers();
             const listItems = document.getElementById('list-items');
@@ -208,48 +283,87 @@
                 if (danger === 'high') badgeColor = 'bg-orange-100 text-orange-800';
                 if (danger === 'danger') badgeColor = 'bg-red-100 text-red-800';
 
-                // マップに鹿アイコンのピンを追加
+                // マップにピンを追加
                 const marker = L.marker([sighting.latitude, sighting.longitude], { icon: deerIcon }).addTo(markersLayer);
-                
                 marker.bindPopup(`
                     <div class="p-1 space-y-1">
                         <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
                         <div class="font-bold text-xs text-gray-800">${sighting.road_name || '場所未登録'}</div>
                         <p class="text-xs text-gray-600">${sighting.comment || '詳細なし'}</p>
                         <p class="text-[10px] text-gray-400">時間帯: ${sighting.time_slot || '不明'}</p>
-                        <button onclick="deleteSpot('${sighting.id}')" class="mt-1 w-full bg-red-600 hover:bg-red-700 text-white text-[10px] py-1 rounded font-medium">この情報を削除する</button>
                     </div>
                 `);
 
-                // サイドバーの管理リストに追加
+                // サイドバーの通常リストに追加（削除ボタンなし）
                 const itemDiv = document.createElement('div');
-                itemDiv.className = 'p-2.5 bg-white border border-gray-200 rounded-lg shadow-sm text-xs space-y-1';
+                itemDiv.className = 'p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm text-xs space-y-1 hover:bg-emerald-50 transition cursor-pointer';
                 itemDiv.innerHTML = `
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between mb-1">
                         <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
-                        <button onclick="deleteSpot('${sighting.id}')" class="text-red-600 hover:text-red-800 font-bold text-[11px] px-2 py-0.5 bg-red-50 hover:bg-red-100 rounded transition">削除</button>
+                        <span class="text-[10px] text-gray-400">${sighting.time_slot || ''}</span>
                     </div>
-                    <div class="font-medium text-gray-800 cursor-pointer hover:text-emerald-700" onclick="focusMarker(${sighting.latitude}, ${sighting.longitude})">
-                        📍 ${sighting.road_name || '場所名なし'}
-                    </div>
-                    <div class="text-gray-600 text-[11px] truncate">${sighting.comment || '詳細なし'} (${sighting.time_slot || ''})</div>
+                    <div class="font-medium text-gray-800">${sighting.road_name || '場所名なし'}</div>
+                    <div class="text-gray-600 truncate mt-0.5">${sighting.comment || '詳細なし'}</div>
                 `;
+                itemDiv.addEventListener('click', () => {
+                    map.setView([sighting.latitude, sighting.longitude], 14);
+                    marker.openPopup();
+                    if (window.innerWidth < 768) {
+                        sidebar.classList.add('-translate-x-full');
+                        setTimeout(() => { map.invalidateSize(); }, 200);
+                    }
+                });
                 listItems.appendChild(itemDiv);
             });
         }
 
-        // リスト項目をクリックしたときに地図を移動してポップアップを開く補助関数
-        window.focusMarker = function(lat, lng) {
-            map.setView([lat, lng], 14);
-            if (window.innerWidth < 768) {
-                sidebar.classList.add('-translate-x-full');
-                setTimeout(() => { map.invalidateSize(); }, 200);
+        // 管理者画面用のデータ一覧（削除ボタン付き）をロード
+        async function loadAdminMarkers() {
+            const adminListItems = document.getElementById('admin-list-items');
+            adminListItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
+
+            const { data, error } = await db
+                .from('deer_spots')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                adminListItems.innerHTML = '<p class="text-xs text-red-500">データを取得できませんでした</p>';
+                return;
             }
-        };
+
+            adminListItems.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                adminListItems.innerHTML = '<p class="text-xs text-gray-400">削除できるデータはありません</p>';
+                return;
+            }
+
+            data.forEach(sighting => {
+                const danger = sighting.danger_level || 'middle';
+                let badgeColor = 'bg-yellow-100 text-yellow-800';
+                if (danger === 'high') badgeColor = 'bg-orange-100 text-orange-800';
+                if (danger === 'danger') badgeColor = 'bg-red-100 text-red-800';
+
+                const adminDiv = document.createElement('div');
+                adminDiv.className = 'p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1 flex items-center justify-between';
+                adminDiv.innerHTML = `
+                    <div class="space-y-1 flex-1 pr-2">
+                        <div class="flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
+                            <span class="font-medium text-gray-800">${sighting.road_name || '場所名なし'}</span>
+                        </div>
+                        <div class="text-gray-600 text-[11px] truncate">${sighting.comment || '詳細なし'} (${sighting.time_slot || ''})</div>
+                    </div>
+                    <button onclick="deleteSpot('${sighting.id}')" class="bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] px-3 py-1.5 rounded transition shrink-0">削除</button>
+                `;
+                adminListItems.appendChild(adminDiv);
+            });
+        }
 
         // データを削除する関数
         window.deleteSpot = async function(id) {
-            if (!confirm('この目撃情報を削除しますか？')) return;
+            if (!confirm('本当にこの目撃情報を削除しますか？')) return;
 
             const { error } = await db
                 .from('deer_spots')
@@ -260,7 +374,8 @@
                 alert('削除に失敗しました: ' + error.message);
             } else {
                 alert('削除しました。');
-                loadMarkers();
+                loadMarkers();      // マップと通常リストを更新
+                loadAdminMarkers(); // 管理画面リストを更新
             }
         };
 
