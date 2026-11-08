@@ -13,12 +13,18 @@
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        /* 画面全体のレイアウト崩れと地図消失を防ぐ必須スタイル */
         html, body {
             height: 100%;
             width: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            flex: 1;
         }
         .deer-marker-icon {
             background: transparent;
@@ -30,14 +36,14 @@
         }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col md:flex-row bg-gray-50 relative">
+<body class="h-screen w-screen flex flex-col md:flex-row bg-gray-50 relative m-0">
 
     <!-- スマホ用：メニューを開くフローティングボタン -->
     <button id="open-menu-btn" class="absolute top-3 left-3 z-[1000] md:hidden bg-emerald-800 text-white px-3.5 py-2 rounded-lg shadow-lg flex items-center gap-1.5 text-xs font-bold hover:bg-emerald-900 transition">
         <span>☰ メニュー</span>
     </button>
 
-    <!-- サイドバー / コントロールパネル -->
+    <!-- サイドバー / 管理画面 -->
     <div id="sidebar" class="fixed md:static inset-y-0 left-0 z-[1100] w-80 md:w-96 bg-white shadow-2xl md:shadow-xl flex flex-col h-full transform -translate-x-full md:translate-x-0 transition-transform duration-300">
         <div class="p-4 border-b border-gray-100 bg-emerald-800 text-white flex justify-between items-center">
             <h1 class="font-bold text-base flex items-center gap-2">
@@ -110,13 +116,30 @@
     </div>
 
     <!-- メインマップエリア -->
-    <div id="map" class="flex-1 h-full w-full"></div>
+    <div id="map"></div>
 
     <script>
         // Supabase設定
         const SUPABASE_URL = 'https://qzjcfwvddpstqcqrpguz.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
         const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // 地図の初期化（十勝エリア）
+        const map = L.map('map', { zoomControl: false }).setView([42.93, 143.65], 10);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // 読み込み完了後に確実に地図のサイズを再計算させる
+        window.addEventListener('load', () => {
+            map.invalidateSize();
+        });
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 300);
 
         // スマホ用メニュー開閉の制御
         const sidebar = document.getElementById('sidebar');
@@ -144,19 +167,6 @@
         });
         document.querySelector('.risk-btn[data-level="middle"]').classList.add('ring-2', 'ring-offset-1', 'ring-black');
 
-        // 十勝エリアを中心とした地図初期化
-        const map = L.map('map', { zoomControl: false }).setView([42.93, 143.65], 10);
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        setTimeout(() => {
-            map.invalidateSize();
-        }, 200);
-
         let markersLayer = L.layerGroup().addTo(map);
 
         // 鹿のアイコン（絵文字）の定義
@@ -168,7 +178,7 @@
             popupAnchor: [0, -10]
         });
 
-        // データベース（deer_spots）から目撃情報を取得してピンを立てる関数（削除ボタン付き）
+        // データベース（deer_spots）から目撃情報を取得してピンを立てる関数
         async function loadMarkers() {
             markersLayer.clearLayers();
             const listItems = document.getElementById('list-items');
@@ -201,7 +211,6 @@
                 // マップに鹿アイコンのピンを追加
                 const marker = L.marker([sighting.latitude, sighting.longitude], { icon: deerIcon }).addTo(markersLayer);
                 
-                // ポップアップ内にも削除ボタンを設置
                 marker.bindPopup(`
                     <div class="p-1 space-y-1">
                         <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
@@ -291,7 +300,6 @@
                 document.getElementById('input-time').value = '';
                 document.getElementById('input-comment').value = '';
                 loadMarkers();
-                if (window.innerWidth on < 768) {} // 念のため安全に処理
                 if (window.innerWidth < 768) {
                     sidebar.classList.add('-translate-x-full');
                     setTimeout(() => { map.invalidateSize(); }, 200);
