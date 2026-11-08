@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>十勝エゾシカ遭遇注意マップ</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,10 +18,12 @@
             width: 100%;
             margin: 0;
             padding: 0;
+            overflow: hidden;
         }
         #map {
             width: 100%;
             height: 100%;
+            flex: 1;
         }
         .deer-marker-icon {
             background: transparent;
@@ -29,37 +31,16 @@
             text-align: center;
             font-size: 24px;
             line-height: 24px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
         }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col md:flex-row bg-gray-50 overflow-hidden relative">
+<body class="h-screen w-screen flex flex-col md:flex-row bg-gray-50 relative m-0">
 
-    <!-- スマホ用：メニューを開くボタン -->
-    <button id="open-menu-btn" class="absolute top-3 left-3 z-[1000] md:hidden bg-emerald-800 text-white px-3 py-2 rounded-lg shadow-lg text-xs font-bold">
-        ☰ メニュー
+    <!-- スマホ用：メニューを開くフローティングボタン -->
+    <button id="open-menu-btn" class="absolute top-3 left-3 z-[1000] md:hidden bg-emerald-800 text-white px-3.5 py-2 rounded-lg shadow-lg flex items-center gap-1.5 text-xs font-bold hover:bg-emerald-900 transition">
+        <span>☰ メニュー</span>
     </button>
 
-    <!-- サイドバー -->
-    <div id="sidebar" class="fixed md:static inset-y-0 left-0 z-[1100] w-80 md:w-96 bg-white shadow-xl flex flex-col h-full transform -translate-x-full md:translate-x-0 transition-transform duration-300">
-        <div class="p-4 border-b bg-emerald-800 text-white flex justify-between items-center">
-            <h1 class="font-bold text-sm">🦌 十勝エゾシカ遭遇注意マップ</h1>
-            <button id="close-menu-btn" class="md:hidden text-white text-xs px-2 py-1 bg-emerald-700 rounded">✕ 閉じる</button>
-        </div>
-        
-        <div class="p-4 flex-1 overflow-y-auto space-y-4">
-            <div class="bg-emerald-50 p-3 rounded text-xs text-emerald-900">
-                十勝エリアのエゾシカ目撃情報を共有するマップです。
-            </div>
-            
-            <div class="bg-gray-50 border p-3 rounded space-y-2">
-                <h2 class="text-xs font-bold text-gray-700">目撃情報を投稿</h2>
-                <div>
-                    <label class="block text-[10px] text-gray-600 mb-1">場所・道路名</label>
-                    <input type="text" id="input-road" placeholder="例: 国道38号線" class="w-full px-2 py-1 border rounded text-xs">
-                </div>
-                <div>
-                    <label class="block text-[10px] text-gray-600 mb-1">危険度</label>
-                    <div class="grid grid-cols-3 gap-1">
-                        <button type="button" class="risk-btn py-1 bg-yellow-500 text-white text-xs rounded font-bold" data-level="middle">注意</button>
-                        <button type="button" class="risk-btn py-1 bg-orange-500 text-white text-xs rounded" data-level="high">警戒</button>
-                        <button type="button" class="risk-btn py
+    <!-- サイドバー / メインパネル -->
+    <div id="sidebar" class="fixed md:static inset-y-0 left-0 z-[1100] w-80 md:w-96 bg-white shadow-2xl md:shadow-xl flex flex-col h-full transform -translate-x-full md:translate-x-0 transition-transform duration-300">
