@@ -39,4 +39,276 @@
 
     <!-- サイドバー / コントロールパネル -->
     <div id="sidebar" class="fixed md:static inset-y-0 left-0 z-[1100] w-80 md:w-96 bg-white shadow-2xl md:shadow-xl flex flex-col h-full transform -translate-x-full md:translate-x-0 transition-transform duration-300">
-        <div class="p
+        <div class="p-4 border-b border-gray-100 bg-emerald-800 text-white flex justify-between items-center">
+            <h1 class="font-bold text-base flex items-center gap-2">
+                🦌 十勝エゾシカ遭遇注意マップ
+            </h1>
+            <!-- メニューを閉じるボタン（スマホ向け） -->
+            <button id="close-menu-btn" class="md:hidden text-white text-xs px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded">
+                ✕ 閉じる
+            </button>
+        </div>
+        
+        <div class="p-4 flex-1 overflow-y-auto space-y-4">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 leading-relaxed">
+                十勝エリアでのエゾシカ目撃情報を共有し、安全なドライブを守るためのマップです。
+            </div>
+            
+            <!-- 投稿フォームエリア -->
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+                <h2 class="text-xs font-bold text-gray-700">目撃情報を投稿する</h2>
+                
+                <div>
+                    <label class="block text-[11px] text-gray-600 mb-1">場所・道路名</label>
+                    <input type="text" id="input-road" placeholder="例: 国道38号線 幕別豊頃間" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-gray-600 mb-1">危険度を選択</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" class="risk-btn py-1.5 px-2 bg-yellow-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="middle">注意 (middle)</button>
+                        <button type="button" class="risk-btn py-1.5 px-2 bg-orange-500 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="high">警戒 (high)</button>
+                        <button type="button" class="risk-btn py-1.5 px-2 bg-red-600 text-white text-xs font-medium rounded shadow-sm hover:opacity-95" data-level="danger">危険 (danger)</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-gray-600 mb-1">時間帯</label>
+                    <input type="text" id="input-time" placeholder="例: 夜 17時半ぐらい" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-gray-600 mb-1">コメント・状況</label>
+                    <input type="text" id="input-comment" placeholder="例: 西側から急に飛び出してきた" class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-600">
+                </div>
+
+                <p class="text-[10px] text-gray-500">※地図上の目撃した場所をクリックしてください。</p>
+                <button id="add-marker-btn" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded shadow transition text-xs">
+                    📍 マップをクリックして投稿
+                </button>
+            </div>
+
+            <!-- 目撃情報一覧 兼 管理・削除パネル -->
+            <div id="marker-list" class="space-y-2 mt-4">
+                <h2 class="text-xs font-bold text-gray-500 uppercase tracking-wider">管理・目撃情報一覧（削除可能）</h2>
+                <div id="list-items" class="space-y-2">
+                    <!-- 動的にリストが追加されます -->
+                </div>
+            </div>
+        </div>
+
+        <!-- サーバー維持・開発サポート（OFUSE）エリア -->
+        <div class="p-3 border-t border-gray-100 bg-gray-50 text-center">
+            <p class="text-[10px] md:text-xs text-gray-400">
+                サーバー維持・開発は 
+                <a href="https://ofuse.me/sky_horizon_self" target="_blank" rel="noopener noreferrer" class="text-emerald-600 hover:underline font-medium">
+                    OFUSE
+                </a> 
+                にて受付中☕
+            </p>
+        </div>
+    </div>
+
+    <!-- メインマップエリア -->
+    <div id="map" class="flex-1 h-full w-full"></div>
+
+    <script>
+        // Supabase設定
+        const SUPABASE_URL = 'https://qzjcfwvddpstqcqrpguz.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_d86l8Fqu8Ml1lX_lU11zLw_3e7LGf91';
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // スマホ用メニュー開閉の制御
+        const sidebar = document.getElementById('sidebar');
+        const openMenuBtn = document.getElementById('open-menu-btn');
+        const closeMenuBtn = document.getElementById('close-menu-btn');
+
+        openMenuBtn.addEventListener('click', () => {
+            sidebar.classList.remove('-translate-x-full');
+            setTimeout(() => { map.invalidateSize(); }, 200);
+        });
+
+        closeMenuBtn.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            setTimeout(() => { map.invalidateSize(); }, 200);
+        });
+
+        // 選択されている危険度の管理
+        let selectedDanger = 'middle';
+        document.querySelectorAll('.risk-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.risk-btn').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-black'));
+                e.target.classList.add('ring-2', 'ring-offset-1', 'ring-black');
+                selectedDanger = e.target.getAttribute('data-level');
+            });
+        });
+        document.querySelector('.risk-btn[data-level="middle"]').classList.add('ring-2', 'ring-offset-1', 'ring-black');
+
+        // 十勝エリアを中心とした地図初期化
+        const map = L.map('map', { zoomControl: false }).setView([42.93, 143.65], 10);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 200);
+
+        let markersLayer = L.layerGroup().addTo(map);
+
+        // 鹿のアイコン（絵文字）の定義
+        const deerIcon = L.divIcon({
+            className: 'deer-marker-icon',
+            html: '🦌',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -10]
+        });
+
+        // データベース（deer_spots）から目撃情報を取得してピンを立てる関数（削除ボタン付き）
+        async function loadMarkers() {
+            markersLayer.clearLayers();
+            const listItems = document.getElementById('list-items');
+            listItems.innerHTML = '<p class="text-xs text-gray-400">読み込み中...</p>';
+
+            const { data, error } = await db
+                .from('deer_spots')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('データ取得エラー:', error);
+                listItems.innerHTML = '<p class="text-xs text-red-500">情報を取得できませんでした</p>';
+                return;
+            }
+
+            listItems.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                listItems.innerHTML = '<p class="text-xs text-gray-400">まだ登録されたデータはありません</p>';
+                return;
+            }
+
+            data.forEach(sighting => {
+                const danger = sighting.danger_level || 'middle';
+                let badgeColor = 'bg-yellow-100 text-yellow-800';
+                if (danger === 'high') badgeColor = 'bg-orange-100 text-orange-800';
+                if (danger === 'danger') badgeColor = 'bg-red-100 text-red-800';
+
+                // マップに鹿アイコンのピンを追加
+                const marker = L.marker([sighting.latitude, sighting.longitude], { icon: deerIcon }).addTo(markersLayer);
+                
+                // ポップアップ内にも削除ボタンを設置
+                marker.bindPopup(`
+                    <div class="p-1 space-y-1">
+                        <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
+                        <div class="font-bold text-xs text-gray-800">${sighting.road_name || '場所未登録'}</div>
+                        <p class="text-xs text-gray-600">${sighting.comment || '詳細なし'}</p>
+                        <p class="text-[10px] text-gray-400">時間帯: ${sighting.time_slot || '不明'}</p>
+                        <button onclick="deleteSpot('${sighting.id}')" class="mt-1 w-full bg-red-600 hover:bg-red-700 text-white text-[10px] py-1 rounded font-medium">この情報を削除する</button>
+                    </div>
+                `);
+
+                // サイドバーの管理リストに追加
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'p-2.5 bg-white border border-gray-200 rounded-lg shadow-sm text-xs space-y-1';
+                itemDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${badgeColor}">【${danger}】</span>
+                        <button onclick="deleteSpot('${sighting.id}')" class="text-red-600 hover:text-red-800 font-bold text-[11px] px-2 py-0.5 bg-red-50 hover:bg-red-100 rounded transition">削除</button>
+                    </div>
+                    <div class="font-medium text-gray-800 cursor-pointer hover:text-emerald-700" onclick="focusMarker(${sighting.latitude}, ${sighting.longitude})">
+                        📍 ${sighting.road_name || '場所名なし'}
+                    </div>
+                    <div class="text-gray-600 text-[11px] truncate">${sighting.comment || '詳細なし'} (${sighting.time_slot || ''})</div>
+                `;
+                listItems.appendChild(itemDiv);
+            });
+        }
+
+        // リスト項目をクリックしたときに地図を移動してポップアップを開く補助関数
+        window.focusMarker = function(lat, lng) {
+            map.setView([lat, lng], 14);
+            if (window.innerWidth < 768) {
+                sidebar.classList.add('-translate-x-full');
+                setTimeout(() => { map.invalidateSize(); }, 200);
+            }
+        };
+
+        // データを削除する関数
+        window.deleteSpot = async function(id) {
+            if (!confirm('この目撃情報を削除しますか？')) return;
+
+            const { error } = await db
+                .from('deer_spots')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                alert('削除に失敗しました: ' + error.message);
+            } else {
+                alert('削除しました。');
+                loadMarkers();
+            }
+        };
+
+        // マップクリック時の新規登録処理
+        map.on('click', async function(e) {
+            const road = document.getElementById('input-road').value.trim();
+            const timeSlot = document.getElementById('input-time').value.trim();
+            const comment = document.getElementById('input-comment').value.trim();
+
+            if (!road) {
+                alert('先に左上のメニューから「場所・道路名」を入力してください！');
+                if (window.innerWidth < 768) {
+                    sidebar.classList.remove('-translate-x-full');
+                }
+                return;
+            }
+
+            const { error } = await db
+                .from('deer_spots')
+                .insert([
+                    { 
+                        latitude: e.latlng.lat, 
+                        longitude: e.latlng.lng, 
+                        road_name: road,
+                        danger_level: selectedDanger,
+                        time_slot: timeSlot,
+                        comment: comment,
+                        is_approved: true
+                    }
+                ]);
+
+            if (error) {
+                alert('投稿に失敗しました: ' + error.message);
+            } else {
+                alert('目撃情報を登録しました！');
+                document.getElementById('input-road').value = '';
+                document.getElementById('input-time').value = '';
+                document.getElementById('input-comment').value = '';
+                loadMarkers();
+                if (window.innerWidth on < 768) {} // 念のため安全に処理
+                if (window.innerWidth < 768) {
+                    sidebar.classList.add('-translate-x-full');
+                    setTimeout(() => { map.invalidateSize(); }, 200);
+                }
+            }
+        });
+
+        document.getElementById('add-marker-btn').addEventListener('click', () => {
+            alert('地図上の目撃した場所をクリックしてください。入力された情報と危険度で登録されます。');
+            if (window.innerWidth < 768) {
+                sidebar.classList.add('-translate-x-full');
+                setTimeout(() => { map.invalidateSize(); }, 200);
+            }
+        });
+
+        // 初期ロード
+        loadMarkers();
+    </script>
+</body>
+</html>
