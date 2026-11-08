@@ -233,14 +233,20 @@
             });
         }
 
-        // マップクリック時の新規登録処理
+	// マップクリック時の新規登録処理（スマホ・PC共通で確実に反応するように修正）
         map.on('click', async function(e) {
+            console.log("マップがクリックされました:", e.latlng); // デバッグ用
+
             const road = document.getElementById('input-road').value.trim();
             const timeSlot = document.getElementById('input-time').value.trim();
             const comment = document.getElementById('input-comment').value.trim();
 
             if (!road) {
-                alert('場所・道路名を入力してください');
+                alert('先に左上の「メニュー」から【場所・道路名】を入力してください！');
+                // スマホで入力しやすいようにメニューを自動で開く
+                if (window.innerWidth < 768) {
+                    sidebar.classList.remove('-translate-x-full');
+                }
                 return;
             }
 
@@ -258,6 +264,20 @@
                     }
                 ]);
 
+            if (error) {
+                alert('投稿に失敗しました: ' + error.message);
+            } else {
+                alert('目撃情報を登録しました！');
+                document.getElementById('input-road').value = '';
+                document.getElementById('input-time').value = '';
+                document.getElementById('input-comment').value = '';
+                loadMarkers();
+                if (window.innerWidth < 768) {
+                    sidebar.classList.add('-translate-x-full');
+                    setTimeout(() => { map.invalidateSize(); }, 200);
+                }
+            }
+        });
             if (error) {
                 alert('投稿に失敗しました: ' + error.message);
             } else {
